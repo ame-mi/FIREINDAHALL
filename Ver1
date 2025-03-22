@@ -1,0 +1,136 @@
+import numpy as np
+import pygame
+import sys
+import random
+
+# константы
+PUSTO = 0  # Пусто
+OGON = 1  # Огонёк опасненько
+VYKHOD = 2  # Выход спасение
+CHEL = 3  # Челики
+PREPYATSTVIE = 4  # Препятствие
+
+# Движняк по сторонам
+NAPRAVLENIYA = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Лево, право, вверх, вниз
+STENKI = {(0, -1): 'left', (0, 1): 'right', (-1, 0): 'top', (1, 0): 'bottom'}
+
+class Kletka:
+    def __init__(self):
+        # Стенки по дефолту вокруг
+        self.stenki = {'top': True, 'bottom': True, 'left': True, 'right': True}
+        self.soderzhimoe = PUSTO
+
+# Генерация лабиринта — просто как в инди-играх
+def generiruy_labirint(stroki, stolbtsy):
+    setka = np.array([[Kletka() for _ in range(stolbtsy)] for _ in range(stroki)])
+    stek = [(1, 1)]
+    zashli = set([(1, 1)])
+
+    while stek:
+        r, c = stek[-1]
+        sosedi = [(r + dr, c + dc, STENKI[(dr, dc)]) for dr, dc in NAPRAVLENIYA
+                  if 1 <= r + dr < stroki - 1 and 1 <= c + dc < stolbtsy - 1 and (r + dr, c + dc) not in zashli]
+
+        if sosedi:
+            nr, nc, stenka = random.choice(sosedi)
+            if stenka == 'left':
+                setka[r][c].stenki['left'] = False
+                setka[nr][nc].stenki['right'] = False
+            elif stenka == 'right':
+                setka[r][c].stenki['right'] = False
+                setka[nr][nc].stenki['left'] = False
+            elif stenka == 'top':
+                setka[r][c].stenki['top'] = False
+                setka[nr][nc].stenki['bottom'] = False
+            elif stenka == 'bottom':
+                setka[r][c].stenki['bottom'] = False
+                setka[nr][nc].stenki['top'] = False
+
+            stek.append((nr, nc))
+            zashli.add((nr, nc))
+        else:
+            stek.pop()
+
+    # Выход — типа победа еее
+    setka[stroki - 2][stolbtsy - 2].soderzhimoe = VYKHOD
+
+    return setka
+
+# Добавляем челиков
+def dobavi_chelikov(setka, kolvo_chelikov=5):
+    for _ in range(kolvo_chelikov):
+        while True:
+            hr, hc = random.randint(1, len(setka) - 2), random.randint(1, len(setka[0]) - 2)
+            if setka[hr][hc].soderzhimoe == PUSTO:
+                setka[hr][hc].soderzhimoe = CHEL
+                break
+
+# Огонёк пошёл по дворам
+def rasprostrani_ogon(setka):
+    for r in range(len(setka)):
+        for c in range(len(setka[0])):
+            if setka[r][c].soderzhimoe == OGON:
+                for dr, dc in NAPRAVLENIYA:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < len(setka) and 0 <= nc < len(setka[0]) and setka[nr][nc].soderzhimoe == PUSTO:
+                        if random.random() < 0.15:
+                            setka[nr][nc].soderzhimoe = OGON
+
+# Визуализация
+def vizualiziruy_pobeg(setka):
+    pygame.init()
+    razmer_kletki = 40
+    stroki, stolbtsy = len(setka), len(setka[0])
+    ekran = pygame.display.set_mode((stolbtsy * razmer_kletki, stroki * razmer_kletki))
+    chasy = pygame.time.Clock()
+
+    cveta = {
+        PUSTO: (255, 255, 255),
+        OGON: (255, 0, 0),
+        VYKHOD: (0, 255, 0),
+        CHEL: (0, 0, 255),
+    }
+
+    def risuy_kletku(x, y, kletka):
+        pygame.draw.rect(ekran, cveta[kletka.soderzhimoe], (x, y, razmer_kletki, razmer_kletki))
+        for storona, est_stenka in kletka.stenki.items():
+            if est_stenka:
+                if storona == 'top':
+                    pygame.draw.line(ekran, (0, 0, 0), (x, y), (x + razmer_kletki, y), 2)
+                elif storona == 'bottom':
+                    pygame.draw.line(ekran, (0, 0, 0), (x, y + razmer_kletki), (x + razmer_kletki, y + razmer_kletki), 2)
+                elif storona == 'left':
+                    pygame.draw.line(ekran, (0, 0, 0), (x, y), (x, y + razmer_kletki), 2)
+                elif storona == 'right':
+                    pygame.draw.line(ekran, (0, 0, 0), (x + razmer_kletki, y), (x + razmer_kletki, y + razmer_kletki), 2)
+
+    tipa_avto = input("Выберите генерацию: (ручная/авто) ").strip().lower()
+    if tipa_avto == "авто":
+        dobavi_chelikov(setka)
+
+    igraem = True
+    ogon_gorit = tipa_avto == "авто"
+
+    while igraem:
+        ekran.fill((200, 200, 200))
+
+        for sobytie in pygame.event.get():
+            if sobytie.type == pygame.QUIT:
+                igraem = False
+
+        for r in range(stroki):
+            for c in range(stolbtsy):
+                risuy_kletku(c * razmer_kletki, r * razmer_kletki, setka[r][c])
+
+        if ogon_gorit:
+            rasprostrani_ogon(setka)
+
+        pygame.display.flip()
+        chasy.tick(10)
+
+    pygame.quit()
+    sys.exit()
+
+# Гоу-гоу старт
+setka = generiruy_labirint(21, 21)
+vizualiziruy_pobeg(setka)
