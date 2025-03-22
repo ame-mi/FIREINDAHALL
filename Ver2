@@ -1,0 +1,202 @@
+import numpy as np
+import pygame
+import sys
+from collections import deque
+import random
+
+PUSTO = 0
+OGON = 1
+VYKHOD = 2
+CHEL = 3
+STENA = 4
+
+NAPRAVLENIYA = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def nayti_puti_k_vykhodu(pole):
+    stroki, stolbtsy = pole.shape
+    ochered = deque()
+    rasstoyaniya = np.full((stroki, stolbtsy), np.inf)
+
+    for r in range(stroki):
+        for c in range(stolbtsy):
+            if pole[r, c] == VYKHOD:
+                ochered.append((r, c))
+                rasstoyaniya[r, c] = 0
+
+    while ochered:
+        r, c = ochered.popleft()
+        for dr, dc in NAPRAVLENIYA:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < stroki and 0 <= nc < stolbtsy and pole[nr, nc] not in [OGON, STENA]:
+                if rasstoyaniya[nr, nc] > rasstoyaniya[r, c] + 1:
+                    rasstoyaniya[nr, nc] = rasstoyaniya[r, c] + 1
+                    ochered.append((nr, nc))
+
+    return rasstoyaniya
+
+def dvizhenie_cheloveka(pole, rasstoyaniya):
+    novoe_pole = pole.copy()
+    stroki, stolbtsy = pole.shape
+
+    for r in range(stroki):
+        for c in range(stolbtsy):
+            if pole[r, c] == CHEL:
+                if rasstoyaniya[r, c] == 0:
+                    novoe_pole[r, c] = VYKHOD
+                    continue
+                luchshii_khod = None
+                min_dist = rasstoyaniya[r, c]
+
+                for dr, dc in NAPRAVLENIYA:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < stroki and 0 <= nc < stolbtsy and rasstoyaniya[nr, nc] < min_dist:
+                        min_dist = rasstoyaniya[nr, nc]
+                        luchshii_khod = (nr, nc)
+
+                if luchshii_khod:
+                    novoe_pole[r, c] = PUSTO
+                    novoe_pole[luchshii_khod] = CHEL
+
+    return novoe_pole
+
+def sgen_maze(stroki, stolbtsy):
+    pole = np.full((stroki, stolbtsy), STENA)
+    stek = [(1, 1)]
+    pole[1, 1] = PUSTO
+
+    while stek:
+        r, c = stek[-1]
+        sosedi = [(r + dr * 2, c + dc * 2, dr, dc) for dr, dc in NAPRAVLENIYA if
+                     0 <= r + dr * 2 < stroki and 0 <= c + dc * 2 < stolbtsy and pole[r + dr * 2, c + dc * 2] == STENA]
+
+        if sosedi:
+            nr, nc, dr, dc = random.choice(sosedi)
+            pole[r + dr, c + dc] = PUSTO
+            pole[nr, nc] = PUSTO
+            stek.append((nr, nc))
+        else:
+            stek.pop()
+
+    pole[stroki - 2, stolbtsy - 2] = VYKHOD
+    for _ in range(stroki * stolbtsy // 15):
+        fr, fc = random.randint(1, stroki - 2), random.randint(1, stolbtsy - 2)
+        if pole[fr, fc] == PUSTO:
+            pole[fr, fc] = OGON
+
+    return pole
+
+def dobavit_lyudey(pole, kol_chelovek=5):
+    for _ in range(kol_chelovek):
+        while True:
+            hr, hc = random.randint(1, 19), random.randint(1, 19)
+            if pole[hr, hc] == PUSTO:
+                pole[hr, hc] = CHEL
+                break
+    return pole
+
+def proveryaem_konets_igry(pole):
+    return CHEL not in pole
+
+def razrastanie_ognya(pole):
+    novoe_pole = pole.copy()
+    stroki, stolbtsy = pole.shape
+
+    for r in range(stroki):
+        for c in range(stolbtsy):
+            if pole[r, c] == OGON:
+                for dr, dc in NAPRAVLENIYA:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < stroki and 0 <= nc < stolbtsy and pole[nr, nc] == PUSTO:
+                        if random.random() < 0.01:
+                            novoe_pole[nr, nc] = OGON
+
+    return novoe_pole
+
+
+def visualize_escape(grid):
+    """Рисуем как все бегут или горят"""
+    pygame.init()
+    pygame.mixer.init()
+    #pygame.mixer.music.load("music.mp3")
+    #pygame.mixer.music.play(-1)
+
+    cell_size = 40
+    rows, cols = grid.shape
+    screen = pygame.display.set_mode((cols * cell_size, rows * cell_size))
+    clock = pygame.time.Clock()
+    colors = {
+        PUSTO: (255, 255, 255),
+        OGON: (255, 0, 0),
+        VYKHOD: (0, 255, 0),
+        CHEL: (0, 0, 255),
+        STENA: (128, 128, 128)
+    }
+
+    font = pygame.font.Font(None, 50)
+    game_over = False
+    running = True
+
+    while running:
+        screen.fill((0, 0, 0))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        if not game_over:
+            grid = razrastanie_ognya(grid)
+            distances = nayti_puti_k_vykhodu(grid)
+            grid = dvizhenie_cheloveka(grid, distances)
+            if proveryaem_konets_igry(grid):
+                game_over = True
+
+        for r in range(rows):
+            for c in range(cols):
+                pygame.draw.rect(screen, colors[grid[r, c]], (c * cell_size, r * cell_size, cell_size, cell_size))
+                pygame.draw.rect(screen, (0, 0, 0), (c * cell_size, r * cell_size, cell_size, cell_size), 1)
+
+        if game_over:
+            text = font.render("Вы проиграли", True, (255, 0, 0))
+            screen.blit(text, (cols * cell_size // 4, rows * cell_size // 2))
+
+        pygame.display.flip()
+        clock.tick(2)
+
+    pygame.quit()
+    sys.exit()
+
+
+# Добавляем кнопки выбора генерации
+pygame.init()
+screen = pygame.display.set_mode((300, 150))
+pygame.display.set_caption("Выбор генерации")
+font = pygame.font.Font(None, 40)
+
+def draw_buttons():
+    screen.fill((200, 200, 200))
+    text_manual = font.render("Ручная", True, (0, 0, 0))
+    text_auto = font.render("Авто", True, (0, 0, 0))
+    screen.blit(text_manual, (50, 50))
+    screen.blit(text_auto, (200, 50))
+    pygame.display.flip()
+
+draw_buttons()
+
+generating = True
+grid = np.zeros((21, 21), dtype=int)  # Initialize with a default grid
+while generating:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            x, y = pygame.mouse.get_pos()
+            if 50 <= x <= 150 and 50 <= y <= 100:
+                grid = np.zeros((21, 21), dtype=int)  # Ручная генерация
+                generating = False
+            elif 200 <= x <= 300 and 50 <= y <= 100:
+                grid = sgen_maze(21, 21)  # Автоматическая генерация
+                grid = dobavit_lyudey(grid) 
+                generating = False
+
+visualize_escape(grid)
