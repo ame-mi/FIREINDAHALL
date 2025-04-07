@@ -1,0 +1,319 @@
+import numpy as np
+import pygame
+import sys
+import random
+
+
+pusto = 0
+ogon = 1
+vyhod = 2
+chelovek = 3
+prepyatstvie = 4
+stenka = 5
+
+
+napravleniya = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def poisk_puti_ot(grid, nachalo):
+
+    stroki, stolbcy = grid.shape
+    poseshennye = set()
+    ochered = [nachalo]
+    roditel = {}
+    sx, sy = nachalo
+
+    while ochered:
+        x, y = ochered.pop(0)
+        if grid[y, x] == vyhod:
+            put = []
+            while (x, y) != (sx, sy):
+                put.append((x, y))
+                x, y = roditel[(x, y)]
+            put.reverse()
+            return put
+
+        for dx, dy in napravleniya:
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < stolbcy and 0 <= ny < stroki and grid[ny, nx] != stenka and grid[ny, nx] != ogon and (
+            nx, ny) not in poseshennye):
+                poseshennye.add((nx, ny))
+                ochered.append((nx, ny))
+                roditel[(nx, ny)] = (x, y)
+    return []
+
+def generirovat_labirint(stroki, stolbcy):
+
+    labirint = np.full((stroki * 2 + 1, stolbcy * 2 + 1), stenka)
+
+    def proryt(x, y):
+        labirint[y][x] = pusto
+        naprav = napravleniya.copy()
+        random.shuffle(naprav)
+        for dx, dy in naprav:
+            nx, ny = x + dx * 2, y + dy * 2
+            if 0 <= nx < stolbcy * 2 + 1 and 0 <= ny < stroki * 2 + 1 and labirint[ny][nx] == stenka:
+                labirint[y + dy][x + dx] = pusto
+                proryt(nx, ny)
+
+    proryt(1, 1)
+
+    labirint[stroki * 2 - 1][stolbcy * 2 - 1] = vyhod
+
+
+    for _ in range(stroki):
+        x, y = random.randint(1, stolbcy * 2 - 1), random.randint(1, stroki * 2 - 1)
+        if labirint[y, x] == pusto:
+            labirint[y, x] = ogon
+
+    return labirint
+
+def rasprostranit_ogon(grid):
+    novye_ogni = []
+    for y in range(1, grid.shape[0] - 1):
+        for x in range(1, grid.shape[1] - 1):
+            if grid[y, x] == ogon:
+                for dx, dy in napravleniya:
+                    nx, ny = x + dx, y + dy
+                    if grid[ny, nx] == pusto and random.random() < 0.06:
+                        novye_ogni.append((nx, ny))
+    for x, y in novye_ogni:
+        grid[y, x] = ogon
+
+def prostoy_poisk_vyhoda(grid):
+    """Prostoy algoritm poiska vykhoda."""
+    stroki, stolbcy = grid.shape
+    poseshennye = set()
+    ochered = [(1, 1)]
+    roditel = {}
+
+    while ochered:
+        x, y = ochered.pop(0)
+        if grid[y, x] == vyhod:
+            put = []
+            while (x, y) != (1, 1):
+                put.append((x, y))
+                x, y = roditel[(x, y)]
+            put.reverse()
+            return put
+
+        for dx, dy in napravleniya:
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < stolbcy and 0 <= ny < stroki and grid[ny, nx] != stenka and grid[ny, nx] != ogon and (
+            nx, ny) not in poseshennye):
+                poseshennye.add((nx, ny))
+                ochered.append((nx, ny))
+                roditel[(nx, ny)] = (x, y)
+    return []
+
+def vizualizatsiya_pobega(grid):
+
+    put = []
+    rabotaet = True
+    chelovek_postavlen = False
+    schetchik_shagov = 0
+    zaderzhka_shaga = 5
+    ochki = 0
+    pygame.init()
+    pygame.font.init()
+    shrift = pygame.font.SysFont('Pixeloid Sans', 24)
+    razmer_yacheyki = 20
+    stroki, stolbcy = grid.shape
+    ekran = pygame.display.set_mode((stolbcy * razmer_yacheyki, stroki * razmer_yacheyki))
+    chasy = pygame.time.Clock()
+
+    # Zagruska izobrazheniy
+    izobr_cheloveka = pygame.image.load('photo1.png')
+    izobr_vyhoda = pygame.image.load('photo2.png')
+    izobr_ognya = pygame.image.load('photo3.png')
+    izobr_stenki = pygame.image.load('photo4.png')
+    izobr_stenki = pygame.transform.scale(izobr_stenki, (razmer_yacheyki, razmer_yacheyki))
+    izobr_fon = pygame.image.load('photo5.png')
+    izobr_fon = pygame.transform.scale(izobr_fon, (stolbcy * razmer_yacheyki, stroki * razmer_yacheyki))
+    izobr_cheloveka = pygame.transform.scale(izobr_cheloveka, (razmer_yacheyki, razmer_yacheyki))
+    izobr_vyhoda = pygame.transform.scale(izobr_vyhoda, (razmer_yacheyki, razmer_yacheyki))
+    izobr_ognya = pygame.transform.scale(izobr_ognya, (razmer_yacheyki, razmer_yacheyki))
+
+
+    cveta = {
+        pusto: (255, 255, 255),
+        stenka: (128, 128, 128)
+    }
+
+    put = []
+    rabotaet = True
+    chelovek_postavlen = False
+    schetchik_shagov = 0
+    zaderzhka_shaga = 5
+
+    while rabotaet:
+        for sobytie in pygame.event.get():
+            if sobytie.type == pygame.QUIT:
+                rabotaet = False
+
+
+            elif sobytie.type == pygame.MOUSEBUTTONDOWN and not chelovek_postavlen:
+
+                mysh_x, mysh_y = pygame.mouse.get_pos()
+
+                setka_x, setka_y = mysh_x // razmer_yacheyki, mysh_y // razmer_yacheyki
+
+                if grid[setka_y][setka_x] == pusto:
+                    grid[setka_y][setka_x] = chelovek
+
+                    nachalo_poz = (setka_x, setka_y)
+
+                    put = poisk_puti_ot(grid, nachalo_poz)
+
+                    ochki = len(put)
+
+                    chelovek_postavlen = True
+
+
+            elif sobytie.type == pygame.KEYDOWN and sobytie.key == pygame.K_SPACE and chelovek_postavlen:
+                put = poisk_puti_ot(grid, nachalo_poz)
+
+        if put:
+            schetchik_shagov += 1
+            if schetchik_shagov >= zaderzhka_shaga:
+                schetchik_shagov = 0
+                x, y = put.pop(0)
+
+                if nachalo_poz != (x, y):
+                    px, py = nachalo_poz
+                    grid[py][px] = pusto  # Удалить игрока с предыдущей клетки
+                nachalo_poz = (x, y)
+                if grid[y][x] == ogon:
+                    ochki = 0
+                    rabotaet = False
+                    continue
+
+                if grid[y][x] == vyhod:
+                    ochki += 1
+                    grid[y][x] = chelovek
+                    rabotaet = False
+                else:
+                    grid[y][x] = chelovek
+
+        ekran.fill((0, 0, 0))
+        for r in range(stroki):
+            for c in range(stolbcy):
+                if grid[r, c] == stenka:
+                    ekran.blit(izobr_stenki, (c * razmer_yacheyki, r * razmer_yacheyki))
+                elif grid[r, c] == pusto:
+                    pygame.draw.rect(ekran, cveta[pusto],
+                                     (c * razmer_yacheyki, r * razmer_yacheyki, razmer_yacheyki, razmer_yacheyki))
+                elif grid[r, c] == chelovek:
+                    ekran.blit(izobr_cheloveka, (c * razmer_yacheyki, r * razmer_yacheyki))
+                elif grid[r, c] == vyhod:
+                    ekran.blit(izobr_vyhoda, (c * razmer_yacheyki, r * razmer_yacheyki))
+                elif grid[r, c] == ogon:
+                    ekran.blit(izobr_ognya, (c * razmer_yacheyki, r * razmer_yacheyki))
+
+        if chelovek_postavlen:
+            rasprostranit_ogon(grid)
+        tekst = shrift.render(f'Очки: {ochki}', True, (255, 255, 255))
+        ekran.blit(tekst, (2, 2))
+
+        pygame.display.flip()
+        chasy.tick(10)
+
+    pygame.quit()
+    konechnyy_ekran(ochki)
+    sys.exit()
+
+
+def nachalny_ekran():
+    pygame.init()
+    pygame.font.init()
+    shirina, vysota = 600, 400
+    ekran = pygame.display.set_mode((shirina, vysota))
+    pygame.display.set_caption("Эвакуация из лабиринта")
+    chasy = pygame.time.Clock()
+    shrift = pygame.font.SysFont('Pixeloid Sans', 28)
+    malyy_shrift = pygame.font.SysFont('Pixeloid Sans', 20)
+    knopka_igrat = pygame.Rect(shirina // 2 - 90, vysota // 2 + 60, 160, 50)
+
+    while True:
+        ekran.fill((91, 64, 42))
+        zagolovok = shrift.render("Эвакуация из лабиринта", True, (255, 255, 255))
+        pravila = [
+            "1. Кликните по пустой клетке, чтобы разместить человека.",
+            "2. Нажмите ПРОБЕЛ, чтобы начать движение.",
+            "3. Избегайте огня. Цель — добраться до выхода.",
+            "4. Огонь начинает двигаться после размещения человека.",
+            "5. Чем дальше персонаж от выхода, тем больше очков."
+        ]
+
+        ekran.blit(zagolovok, (shirina // 2 - zagolovok.get_width() // 2, 40))
+        for i, stroka in enumerate(pravila):
+            tekst = malyy_shrift.render(stroka, True, (200, 200, 200))
+            ekran.blit(tekst, (60, 90 + i * 30))
+
+        pygame.draw.rect(ekran, (143, 201, 103), knopka_igrat)
+        tekst_knopki = shrift.render("Играть", True, (255, 255, 255))
+        ekran.blit(tekst_knopki, (knopka_igrat.x + 45, knopka_igrat.y + 15))
+
+        for sobytie in pygame.event.get():
+            if sobytie.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif sobytie.type == pygame.MOUSEBUTTONDOWN:
+                if knopka_igrat.collidepoint(pygame.mouse.get_pos()):
+                    return
+
+        pygame.display.flip()
+        chasy.tick(60)
+
+def konechnyy_ekran(ochki):
+    pygame.init()
+    ekran = pygame.display.set_mode((400, 300))
+    pygame.display.set_caption("Игра окончена")
+    shrift = pygame.font.SysFont('Pixeloid Sans', 36)
+    malyy_shrift = pygame.font.SysFont('Pixeloid Sans', 24)
+    chasy = pygame.time.Clock()
+
+    knopka_snova = pygame.Rect(60, 200, 130, 50)
+    knopka_vyhod = pygame.Rect(210, 200, 130, 50)
+
+    while True:
+        ekran.fill((91, 64, 42))
+        tekst1 = shrift.render("Игра окончена", True, (255, 255, 255))
+        tekst2 = malyy_shrift.render(f"Очки: {ochki}", True, (61, 107, 255))
+
+        ekran.blit(tekst1, (200 - tekst1.get_width() // 2, 60))
+        ekran.blit(tekst2, (200 - tekst2.get_width() // 2, 120))
+
+
+        pygame.draw.rect(ekran, (143, 201, 103), knopka_snova)
+        tekst_knopki_snova = malyy_shrift.render("Сыграть снова", True, (255, 255, 255))
+        ekran.blit(tekst_knopki_snova, (knopka_snova.x + 5, knopka_snova.y + 15))
+
+
+        pygame.draw.rect(ekran, (143, 201, 103), knopka_vyhod)
+        tekst_knopki_vyhod = malyy_shrift.render("Выйти", True, (255, 255, 255))
+        ekran.blit(tekst_knopki_vyhod, (knopka_vyhod.x + 35, knopka_vyhod.y + 15))
+
+        for sobytie in pygame.event.get():
+            if sobytie.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif sobytie.type == pygame.MOUSEBUTTONDOWN:
+                if knopka_snova.collidepoint(pygame.mouse.get_pos()):
+
+                    stroki, stolbcy = 10, 10
+                    setka = generirovat_labirint(stroki, stolbcy)
+                    vizualizatsiya_pobega(setka)
+                    return
+                elif knopka_vyhod.collidepoint(pygame.mouse.get_pos()):
+                    pygame.quit()
+                    sys.exit()
+
+        pygame.display.flip()
+        chasy.tick(30)
+
+nachalny_ekran()
+stroki, stolbcy = 10, 10
+pygame.mixer.music.load("music.mp3")
+pygame.mixer.music.play(-1)
+setka = generirovat_labirint(stroki, stolbcy)
+vizualizatsiya_pobega(setka)
