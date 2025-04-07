@@ -1,0 +1,202 @@
+import numpy as np
+import pygame
+import sys
+import random
+
+# Tipy ob'ektov na karte
+pusto = 0
+ogon = 1
+vyhod = 2
+chelovek = 3
+prepyatstvie = 4
+stenka = 5
+
+# Napravleniya dlya dvizheniya (vverh, vniz, vlevo, vpravo)
+napravleniya = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def poisk_puti_ot(grid, nachalo):
+    """Poisk puti ot zadannoy pozitsii do vykhoda."""
+    stroki, stolbcy = grid.shape
+    poseshennye = set()
+    ochered = [nachalo]
+    roditel = {}
+    sx, sy = nachalo
+
+    while ochered:
+        x, y = ochered.pop(0)
+        if grid[y, x] == vyhod:
+            put = []
+            while (x, y) != (sx, sy):
+                put.append((x, y))
+                x, y = roditel[(x, y)]
+            put.reverse()
+            return put
+
+        for dx, dy in napravleniya:
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < stolbcy and 0 <= ny < stroki and grid[ny, nx] != stenka and grid[ny, nx] != ogon and (
+            nx, ny) not in poseshennye):
+                poseshennye.add((nx, ny))
+                ochered.append((nx, ny))
+                roditel[(nx, ny)] = (x, y)
+    return []
+
+def generirovat_labirint(stroki, stolbcy):
+    """Generatsiya labirinta s ispol'zovaniem algoritma Eylera."""
+    labirint = np.full((stroki * 2 + 1, stolbcy * 2 + 1), stenka)
+
+    def proryt(x, y):
+        labirint[y][x] = pusto
+        naprav = napravleniya.copy()
+        random.shuffle(naprav)
+        for dx, dy in naprav:
+            nx, ny = x + dx * 2, y + dy * 2
+            if 0 <= nx < stolbcy * 2 + 1 and 0 <= ny < stroki * 2 + 1 and labirint[ny][nx] == stenka:
+                labirint[y + dy][x + dx] = pusto
+                proryt(nx, ny)
+
+    proryt(1, 1)
+
+    labirint[stroki * 2 - 1][stolbcy * 2 - 1] = vyhod
+
+    # Rasshityvaem ogon sluchayno
+    for _ in range(stroki):
+        x, y = random.randint(1, stolbcy * 2 - 1), random.randint(1, stroki * 2 - 1)
+        if labirint[y, x] == pusto:
+            labirint[y, x] = ogon
+
+    return labirint
+
+def rasprostranit_ogon(grid):
+    novye_ogni = []
+    for y in range(1, grid.shape[0] - 1):
+        for x in range(1, grid.shape[1] - 1):
+            if grid[y, x] == ogon:
+                for dx, dy in napravleniya:
+                    nx, ny = x + dx, y + dy
+                    if grid[ny, nx] == pusto and random.random() < 0.001:
+                        novye_ogni.append((nx, ny))
+    for x, y in novye_ogni:
+        grid[y, x] = ogon
+
+def prostoy_poisk_vyhoda(grid):
+    """Prostoy algoritm poiska vykhoda."""
+    stroki, stolbcy = grid.shape
+    poseshennye = set()
+    ochered = [(1, 1)]
+    roditel = {}
+
+    while ochered:
+        x, y = ochered.pop(0)
+        if grid[y, x] == vyhod:
+            put = []
+            while (x, y) != (1, 1):
+                put.append((x, y))
+                x, y = roditel[(x, y)]
+            put.reverse()
+            return put
+
+        for dx, dy in napravleniya:
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < stolbcy and 0 <= ny < stroki and grid[ny, nx] != stenka and grid[ny, nx] != ogon and (
+            nx, ny) not in poseshennye):
+                poseshennye.add((nx, ny))
+                ochered.append((nx, ny))
+                roditel[(nx, ny)] = (x, y)
+    return []
+
+def vizualizatsiya_pobega(grid):
+    put = []
+    rabotaet = True
+    chelovek_postavlen = False
+    schetchik_shagov = 0
+    zaderzhka_shaga = 5
+    ochki = 0
+    pygame.init()
+    pygame.font.init()
+    shrift = pygame.font.SysFont('Arial', 24)
+    razmer_yacheyki = 20
+    stroki, stolbcy = grid.shape
+    ekran = pygame.display.set_mode((stolbcy * razmer_yacheyki, stroki * razmer_yacheyki))
+    chasy = pygame.time.Clock()
+
+    # Zagruska izobrazheniy
+    izobr_cheloveka = pygame.image.load('photo1.png')
+    izobr_vyhoda = pygame.image.load('photo2.png')
+    izobr_ognya = pygame.image.load('photo3.png')
+    izobr_cheloveka = pygame.transform.scale(izobr_cheloveka, (razmer_yacheyki, razmer_yacheyki))
+    izobr_vyhoda = pygame.transform.scale(izobr_vyhoda, (razmer_yacheyki, razmer_yacheyki))
+    izobr_ognya = pygame.transform.scale(izobr_ognya, (razmer_yacheyki, razmer_yacheyki))
+
+    cveta = {
+        pusto: (255, 255, 255),
+        stenka: (128, 128, 128)
+    }
+
+    put = []
+    rabotaet = True
+    chelovek_postavlen = False
+    schetchik_shagov = 0
+    zaderzhka_shaga = 5
+
+    while rabotaet:
+        for sobytie in pygame.event.get():
+            if sobytie.type == pygame.QUIT:
+                rabotaet = False
+
+
+            elif sobytie.type == pygame.MOUSEBUTTONDOWN and not chelovek_postavlen:
+
+                mysh_x, mysh_y = pygame.mouse.get_pos()
+
+                setka_x, setka_y = mysh_x // razmer_yacheyki, mysh_y // razmer_yacheyki
+
+                if grid[setka_y][setka_x] == pusto:
+                    grid[setka_y][setka_x] = chelovek
+
+                    nachalo_poz = (setka_x, setka_y)
+
+                    put = poisk_puti_ot(grid, nachalo_poz)
+
+                    ochki = len(put)
+
+                    chelovek_postavlen = True
+
+
+            elif sobytie.type == pygame.KEYDOWN and sobytie.key == pygame.K_SPACE and chelovek_postavlen:
+                put = poisk_puti_ot(grid, nachalo_poz)
+
+        if put:
+            schetchik_shagov += 1
+            if schetchik_shagov >= zaderzhka_shaga:
+                schetchik_shagov = 0
+                x, y = put.pop(0)
+                grid[y, x] = chelovek
+
+        ekran.fill((0, 0, 0))
+        for r in range(stroki):
+            for c in range(stolbcy):
+                if grid[r, c] in cveta:
+                    pygame.draw.rect(ekran, cveta[grid[r, c]], (c * razmer_yacheyki, r * razmer_yacheyki, razmer_yacheyki, razmer_yacheyki))
+                elif grid[r, c] == chelovek:
+                    ekran.blit(izobr_cheloveka, (c * razmer_yacheyki, r * razmer_yacheyki))
+                elif grid[r, c] == vyhod:
+                    ekran.blit(izobr_vyhoda, (c * razmer_yacheyki, r * razmer_yacheyki))
+                elif grid[r, c] == ogon:
+                    ekran.blit(izobr_ognya, (c * razmer_yacheyki, r * razmer_yacheyki))
+
+        if chelovek_postavlen:
+            rasprostranit_ogon(grid)
+        tekst = shrift.render(f'Ochki: {ochki}', True, (255, 255, 0))
+        ekran.blit(tekst, (10, 10))
+
+        pygame.display.flip()
+        chasy.tick(10)
+
+    pygame.quit()
+    sys.exit()
+
+# Generatsiya i vizualizatsiya labirinta
+stroki, stolbcy = 10, 10
+setka = generirovat_labirint(stroki, stolbcy)
+vizualizatsiya_pobega(setka)
